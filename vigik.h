@@ -25,6 +25,10 @@
 #ifndef __VIGIK_H__
 #define __VIGIK_H__
 
+#define MF1S50YYX_BLOCK_SIZE   16
+#define MF1S50YYX_SECTOR_COUNT 16
+#define MF1S50YYX_SECTOR_SIZE  4
 
+#define MF1S50YYX_MEMORY_SIZE  1024
 
 #endif	/* __VIGIK_H__ */
