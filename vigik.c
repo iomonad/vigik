@@ -32,35 +32,35 @@
 
 #include "vigik.h"
 
-static void usage() {
-  printf("./vigik -k <private-key>\n");
+static void usage(char *argv[]) {
+     fprintf(stderr, "%s -k <private-key>\n");
 }
 
 int main(int argc, char *argv[]) {
-  int  c;
-  char *pk = NULL;
+     int  c;
+     char *pk = NULL;
 
-  while ((c = getopt (argc, argv, "k:")) != -1) {
-    switch (c) {
-    case 'k':
-      pk = optarg;
-      break;
-    case '?':
-      if (optopt == 'c') {
-	fprintf(stderr, "option -%c requires argument\n", optopt);
-	return 1;
-      }
-    default:
-      return 1;
-    }
-  }
+     while ((c = getopt (argc, argv, "k:")) != -1) {
+	  switch (c) {
+	  case 'k':
+	       pk = optarg;
+	       break;
+	  case '?':
+	       if (optopt == 'c') {
+		    fprintf(stderr, "option -%c requires argument\n", optopt);
+		    return 1;
+	       }
+	  default:
+	       return 1;
+	  }
+     }
 
-  if (pk == NULL) {
-    usage();
+     if (pk == NULL) {
+	  usage();
 
-    return 1;
-  }
+	  return 1;
+     }
 
-  fprintf(stdout, "using private key path '%s'\n", pk);
-  return 0;
+     fprintf(stdout, "using private key path '%s'\n", pk);
+     return 0;
 }
