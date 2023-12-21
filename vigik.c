@@ -32,6 +32,7 @@
 #include <openssl/sha.h>
 
 #include "vigik.h"
+#include "ansicode.h"
 
 #define VERSION "0.0.1"
 
@@ -104,12 +105,23 @@ static bool mifare_fill_memory_slot(uint8_t *buffer) {
 static void mifare_dump_memory(FILE *fd, uint8_t *buffer) {
      for (size_t sector = 0; sector < MF1S50YYX_SECTOR_COUNT; sector++) {
 	  for (size_t zSector = 0 ; zSector < MF1S50YYX_SECTOR_SIZE; zSector++) {
-	       fprintf(fd, "%.02ld.%ld/%d.%.02ld\t", sector, zSector, MF1S50YYX_SECTOR_SIZE,
+
+	       fprintf(fd, CRESET);
+	       fprintf(fd, "%.02ld.%ld/%d.%.02ld\t", sector, zSector + 1, MF1S50YYX_SECTOR_SIZE,
 		       (sector * MF1S50YYX_SECTOR_SIZE) + zSector);
+
+	       if (zSector == (MF1S50YYX_SECTOR_SIZE - 1)) {
+		    fprintf(fd, YEL);
+	       } else {
+		    fprintf(fd, CRESET);
+	       }
+
 	       for (size_t bIterator = 0; bIterator < MF1S50YYX_BLOCK_SIZE; bIterator++) {
 		    size_t real = (sector * (MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE))
 			 + (zSector * MF1S50YYX_BLOCK_SIZE) + bIterator;
-		    fprintf(fd, "%02X ", buffer[real]);
+		    uint8_t b = buffer[real];
+
+		    fprintf(fd, "%02X ", b);
 	       }
 	       fprintf(fd, "\n");
 	  }
