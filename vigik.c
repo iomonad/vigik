@@ -38,14 +38,15 @@
 static char *pk = NULL;
 static char *dump = NULL;
 static char *output = NULL;
-
+static bool dry_run = false, debug = false;
 static uint8_t *MF1S50YYX_memory_slot = NULL;
+static uint8_t *MF1S50YYX_memory_slot_staging = NULL;
 
 /* MIFARE OPERATIONS */
 
-static bool mifare_reset_memory_slot(void) {
-     if (MF1S50YYX_memory_slot != NULL) {
-	  bzero(MF1S50YYX_memory_slot, MF1S50YYX_MEMORY_SIZE);
+static bool mifare_reset_memory_slot(void *memory) {
+     if (memory != NULL) {
+	  bzero(memory, MF1S50YYX_MEMORY_SIZE);
 	  return true;
      } else {
 	  return false;
@@ -55,17 +56,12 @@ static bool mifare_reset_memory_slot(void) {
 static uint8_t *mifare_allocate_memory_slot() {
      uint8_t *slot = NULL;
 
-     if (MF1S50YYX_memory_slot != NULL) {
-	  printf("allocate: memory slot already allocated on %p\n",
-	       MF1S50YYX_memory_slot);
-	  return NULL;
-     }
      if ((slot = (uint8_t*)malloc(MF1S50YYX_MEMORY_SIZE * sizeof(uint8_t))) == NULL) {
 	  printf("allocate: malloc() error\n");
 	  return NULL;
      }
 
-     mifare_reset_memory_slot();
+     mifare_reset_memory_slot(slot);
      return slot;
 }
 
@@ -125,16 +121,30 @@ static void mifare_dump_memory(FILE *fd, uint8_t *buffer) {
 
 static bool vigik_process_signature(void) {
 
+     /* Allocate Memory Cartdrige */
      MF1S50YYX_memory_slot = mifare_allocate_memory_slot();
+     MF1S50YYX_memory_slot_staging = mifare_allocate_memory_slot();
 
+     /* Fill up Proxmark dump to Memory Slot (initial one) */
      if (!mifare_fill_memory_slot(MF1S50YYX_memory_slot)) {
 	  fprintf(stderr, "issue while filling memory\n");
 	  exit(EXIT_FAILURE);
      }
 
-     mifare_dump_memory(stdout, MF1S50YYX_memory_slot);
+     /* Make a hard copy of the memory cartdrige for
+      * crypto alteration
+      */
+     MF1S50YYX_memory_slot_staging =
+	  memcpy(MF1S50YYX_memory_slot_staging,
+		 MF1S50YYX_memory_slot, MF1S50YYX_MEMORY_SIZE);
+
+     if (debug) {
+	  mifare_dump_memory(stdout, MF1S50YYX_memory_slot);
+     }
 
      mifare_release_memory_slot(MF1S50YYX_memory_slot);
+     mifare_release_memory_slot(MF1S50YYX_memory_slot_staging);
+
      return true;
 }
 
@@ -166,6 +176,12 @@ int main(int argc, char *argv[]) {
 	       break;
 	  case 'o':
 	       output = optarg;
+	       break;
+	  case 'd':
+	       debug = true;
+	       break;
+	  case 'c':
+	       dry_run = true;
 	       break;
 	  case '?':
 	       if (optopt == 'k' || optopt == 'i' || optopt == 'o') {
