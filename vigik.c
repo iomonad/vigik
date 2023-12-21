@@ -71,7 +71,7 @@ static bool mifare_release_memory_slot(uint8_t *buffer) {
 	  free(buffer);
 	  return true;
      } else {
-	  printf("vigik: buffer already released\n");
+	  printf("warn: buffer already released\n");
 	  return false;
      }
 }
@@ -82,7 +82,7 @@ static bool mifare_fill_memory_slot(uint8_t *buffer) {
      FILE *fp = fopen(dump, "rb");
 
      if (fp == NULL) {
-	  printf("input: bad dump input\n");
+	  printf("error: bad dump input\n");
 
 	  exit(EXIT_FAILURE);
      }
@@ -94,7 +94,7 @@ static bool mifare_fill_memory_slot(uint8_t *buffer) {
      fread(buffer, len, 1, fp);
 
      if (len != MF1S50YYX_MEMORY_SIZE) {
-	  printf("mifare: bad dump memory size (%ld)\n", len);
+	  printf("error: bad dump memory size (%ld)\n", len);
 	  exit(EXIT_FAILURE);
      }
      fclose(fp);
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
      }
 
      if (!vigik_process_signature()) {
-	  fprintf(stderr, "error while processing signature\n");
+	  fprintf(stderr, "fatal: error processing signature\n");
 	  return 1;
      }
      return 0;
