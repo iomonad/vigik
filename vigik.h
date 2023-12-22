@@ -45,12 +45,25 @@ static uint8_t VIGIK_CRYPTO_B_KEY[6] = {
      0xEF, 0x61, 0xA3, 0xD4, 0x8E, 0x2A
 };
 
+typedef enum {
+     Poste_Service_Universel = 0x000007AA,
+     Poste_Autres_Services   = 0x000007AB,
+     Edf_Gdf                 = 0x000007AC,
+     France_Telecom          = 0x000007AD,
+     Service_Urgence         = 0x000007B5,
+     Service_Securite        = 0x000007B6,
+
+     Custom                  = 0x0000FFFF
+} Vigik_Service;
+
 typedef struct {
      uint8_t  *MF1S50YYX_memory_slot;
 
-     uint8_t   MF1S50YYX_uid;
-     uint8_t   MF1S50YYX_atqa;
-     uint8_t   MF1S50YYX_sak;
+     uint8_t  *MF1S50YYX_uid;
+     uint8_t  *MF1S50YYX_atqa;
+     uint8_t  *MF1S50YYX_sak;
+
+     Vigik_Service service;
 } Vigik_Cartdrige;
 
 
