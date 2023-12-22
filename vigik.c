@@ -36,14 +36,8 @@
 
 #define VERSION "0.0.1"
 
-static char *pk = NULL;
-static char *dump = NULL;
-static char *output = NULL;
 static bool dry_run = false, debug = false;
-static uint8_t *MF1S50YYX_memory_slot = NULL;
-static uint8_t *MF1S50YYX_memory_slot_staging = NULL;
-
-/* MIFARE OPERATIONS */
+static char *pk = NULL, *dump = NULL, *output = NULL;
 
 static bool mifare_reset_memory_slot(void *memory) {
      if (memory != NULL) {
@@ -132,6 +126,9 @@ static void mifare_dump_memory(FILE *fd, uint8_t *buffer) {
 /* ENTRYPOINT  */
 
 static bool vigik_process_signature(void) {
+
+     uint8_t *MF1S50YYX_memory_slot = NULL;
+     uint8_t *MF1S50YYX_memory_slot_staging = NULL;
 
      /* Allocate Memory Cartdrige */
      MF1S50YYX_memory_slot = mifare_allocate_memory_slot();

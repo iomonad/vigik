@@ -31,4 +31,6 @@
 
 #define MF1S50YYX_MEMORY_SIZE  1024
 
+
+
 #endif	/* __VIGIK_H__ */
