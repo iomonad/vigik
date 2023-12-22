@@ -25,12 +25,33 @@
 #ifndef __VIGIK_H__
 #define __VIGIK_H__
 
+#include <stdlib.h>
+
 #define MF1S50YYX_BLOCK_SIZE   16
 #define MF1S50YYX_SECTOR_COUNT 16
 #define MF1S50YYX_SECTOR_SIZE  4
 
 #define MF1S50YYX_MEMORY_SIZE  1024
 
+static uint8_t VIGIK_CRYPTO_AZERO_KEY[6] = {
+     0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5
+};
+
+static uint8_t VIGIK_CRYPTO_A_KEY[6] = {
+     0x31, 0x4B, 0x49, 0x47, 0x49, 0x56
+};
+
+static uint8_t VIGIK_CRYPTO_B_KEY[6] = {
+     0xEF, 0x61, 0xA3, 0xD4, 0x8E, 0x2A
+};
+
+typedef struct {
+     uint8_t  *MF1S50YYX_memory_slot;
+
+     uint8_t   MF1S50YYX_uid;
+     uint8_t   MF1S50YYX_atqa;
+     uint8_t   MF1S50YYX_sak;
+} Vigik_Cartdrige;
 
 
 #endif	/* __VIGIK_H__ */

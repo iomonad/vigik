@@ -39,7 +39,11 @@
 static bool dry_run = false, debug = false;
 static char *pk = NULL, *dump = NULL, *output = NULL;
 
-static bool mifare_reset_memory_slot(void *memory) {
+//
+// MF1S50YYX Operations
+//
+
+static bool mf1s50yyx_reset_memory_slot(void *memory) {
      if (memory != NULL) {
 	  bzero(memory, MF1S50YYX_MEMORY_SIZE);
 	  return true;
@@ -48,7 +52,7 @@ static bool mifare_reset_memory_slot(void *memory) {
      }
 }
 
-static uint8_t *mifare_allocate_memory_slot() {
+static uint8_t *mf1s50yyx_allocate_memory_slot(void) {
      uint8_t *slot = NULL;
 
      if ((slot = (uint8_t*)malloc(MF1S50YYX_MEMORY_SIZE * sizeof(uint8_t))) == NULL) {
@@ -56,11 +60,11 @@ static uint8_t *mifare_allocate_memory_slot() {
 	  return NULL;
      }
 
-     mifare_reset_memory_slot(slot);
+     mf1s50yyx_reset_memory_slot(slot);
      return slot;
 }
 
-static bool mifare_release_memory_slot(uint8_t *buffer) {
+static bool mf1s50yyx_release_memory_slot(uint8_t *buffer) {
      if (buffer != NULL) {
 	  free(buffer);
 	  return true;
@@ -70,10 +74,10 @@ static bool mifare_release_memory_slot(uint8_t *buffer) {
      }
 }
 
-static bool mifare_fill_memory_slot(uint8_t *buffer) {
+static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
 
      unsigned long len;
-     FILE *fp = fopen(dump, "rb");
+     FILE *fp = fopen(path, "rb");
 
      if (fp == NULL) {
 	  printf("error: bad dump input\n");
@@ -85,7 +89,7 @@ static bool mifare_fill_memory_slot(uint8_t *buffer) {
      len = ftell(fp);
      rewind(fp);
 
-     fread(buffer, len, 1, fp);
+     fread(slot, len, 1, fp);
 
      if (len != MF1S50YYX_MEMORY_SIZE) {
 	  printf("error: bad dump memory size (%ld)\n", len);
@@ -95,8 +99,59 @@ static bool mifare_fill_memory_slot(uint8_t *buffer) {
      return true;
 }
 
+//
+// VIGIK OPERATIONS
+//
 
-static void mifare_dump_memory(FILE *fd, uint8_t *buffer) {
+static Vigik_Cartdrige *vigik_allocate_cartdrige(const char *path) {
+     Vigik_Cartdrige *cartdrige = NULL;
+
+     if ((cartdrige = (Vigik_Cartdrige*)malloc(sizeof(Vigik_Cartdrige))) == NULL) {
+	  fprintf(stderr, "error: vigik cartdrige allocation\n");
+	  exit(EXIT_FAILURE);
+     }
+
+     cartdrige->MF1S50YYX_memory_slot = mf1s50yyx_allocate_memory_slot();
+
+     if (!mf1s50yyx_fill_memory_slot(path, cartdrige->MF1S50YYX_memory_slot)) {
+	  fprintf(stderr, "error: cartdrige->MF1S50YYX_memory_slot fill\n");
+	  exit(EXIT_FAILURE);
+     }
+     return cartdrige;
+}
+
+static Vigik_Cartdrige *vigik_duplicate_cartdrige(Vigik_Cartdrige *cartdrige) {
+     Vigik_Cartdrige *copy = NULL;
+
+     if (cartdrige == NULL) {
+	  return NULL;
+     }
+
+     if ((copy = (Vigik_Cartdrige*)malloc(sizeof(Vigik_Cartdrige))) == NULL) {
+	  fprintf(stderr, "error: vigik cartdrige allocation\n");
+	  exit(EXIT_FAILURE);
+     }
+
+     copy->MF1S50YYX_memory_slot = mf1s50yyx_allocate_memory_slot();
+     copy->MF1S50YYX_memory_slot =
+	  memcpy(copy->MF1S50YYX_memory_slot,
+		 cartdrige->MF1S50YYX_memory_slot, MF1S50YYX_MEMORY_SIZE);
+
+     return copy;
+}
+
+static void vigik_release_cartdrige(Vigik_Cartdrige *cartdrige) {
+     if (cartdrige == NULL) {
+	  return ;
+     }
+
+     mf1s50yyx_release_memory_slot(cartdrige->MF1S50YYX_memory_slot);
+     cartdrige->MF1S50YYX_memory_slot = NULL;
+
+     free(cartdrige);
+}
+
+static void vigik_dump_cartdrige_memory(FILE *fd, Vigik_Cartdrige *cartdrige) {
      for (size_t sector = 0; sector < MF1S50YYX_SECTOR_COUNT; sector++) {
 	  for (size_t zSector = 0 ; zSector < MF1S50YYX_SECTOR_SIZE; zSector++) {
 
@@ -113,7 +168,7 @@ static void mifare_dump_memory(FILE *fd, uint8_t *buffer) {
 	       for (size_t bIterator = 0; bIterator < MF1S50YYX_BLOCK_SIZE; bIterator++) {
 		    size_t real = (sector * (MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE))
 			 + (zSector * MF1S50YYX_BLOCK_SIZE) + bIterator;
-		    uint8_t b = buffer[real];
+		    uint8_t b = cartdrige->MF1S50YYX_memory_slot[real];
 
 		    fprintf(fd, "%02X ", b);
 	       }
@@ -122,41 +177,64 @@ static void mifare_dump_memory(FILE *fd, uint8_t *buffer) {
      }
 }
 
+static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
+     for (size_t sector = 0; sector < MF1S50YYX_SECTOR_COUNT; sector++) {
 
-/* ENTRYPOINT  */
+	  size_t key_sector = (sector * MF1S50YYX_SECTOR_SIZE) + 4;
+	  size_t key_memory_segment = ((MF1S50YYX_BLOCK_SIZE * (key_sector - 1)) + 0x0);
+
+	  VIGIK_CRYPTO_B_KEY[0] = 0;
+	  for (size_t i = 0; i < 6 ; i++) {
+
+	       size_t b_offset = (i + 0xA);
+	       if (((sector == 0) ? VIGIK_CRYPTO_AZERO_KEY[i]
+		    : VIGIK_CRYPTO_A_KEY[i]) !=
+		   cartdrige->MF1S50YYX_memory_slot[key_memory_segment + i]) {
+
+		    printf("badkey A | sector %ld (diff %.02X|%.02X)\n",
+			   sector, ((sector == 0) ? VIGIK_CRYPTO_AZERO_KEY[i]
+				    : VIGIK_CRYPTO_A_KEY[i]),
+			   cartdrige->MF1S50YYX_memory_slot[key_memory_segment + i]);
+
+		    exit(EXIT_FAILURE);
+	       }
+	       if (VIGIK_CRYPTO_B_KEY[i]
+		   != cartdrige->MF1S50YYX_memory_slot[key_memory_segment + b_offset]) {
+		    printf("badkey b | sector %ld (diff %.02X|%.02X)\n",
+			   sector, VIGIK_CRYPTO_B_KEY[i],
+			   cartdrige->MF1S50YYX_memory_slot[key_memory_segment + b_offset]);
+
+		    exit(EXIT_FAILURE);
+	       }
+	  }
+     }
+}
+
+static void vigik_inspect_cartdrige(Vigik_Cartdrige *cartdrige) {
+     vigik_verify_keys(cartdrige);
+}
+
+//
+// ENTRYPOINT
+//
 
 static bool vigik_process_signature(void) {
+     Vigik_Cartdrige *cartdrige = NULL, *cartdrige_staging = NULL;
 
-     uint8_t *MF1S50YYX_memory_slot = NULL;
-     uint8_t *MF1S50YYX_memory_slot_staging = NULL;
+     cartdrige = vigik_allocate_cartdrige(dump);
+     cartdrige_staging = vigik_duplicate_cartdrige(cartdrige);
 
-     /* Allocate Memory Cartdrige */
-     MF1S50YYX_memory_slot = mifare_allocate_memory_slot();
-     MF1S50YYX_memory_slot_staging = mifare_allocate_memory_slot();
-
-     /* Fill up Proxmark dump to Memory Slot (initial one) */
-     if (!mifare_fill_memory_slot(MF1S50YYX_memory_slot)) {
-	  fprintf(stderr, "issue while filling memory\n");
-	  exit(EXIT_FAILURE);
-     }
-
-     /* Make a hard copy of the memory cartdrige for
-      * crypto alteration
-      */
-     MF1S50YYX_memory_slot_staging =
-	  memcpy(MF1S50YYX_memory_slot_staging,
-		 MF1S50YYX_memory_slot, MF1S50YYX_MEMORY_SIZE);
+     vigik_inspect_cartdrige(cartdrige);
 
      if (debug) {
-	  mifare_dump_memory(stdout, MF1S50YYX_memory_slot);
+	  vigik_dump_cartdrige_memory(stdout, cartdrige);
      }
 
-     mifare_release_memory_slot(MF1S50YYX_memory_slot);
-     mifare_release_memory_slot(MF1S50YYX_memory_slot_staging);
+     vigik_release_cartdrige(cartdrige);
+     vigik_release_cartdrige(cartdrige_staging);
 
      return true;
 }
-
 
 static void usage(char *argv[]) {
      fprintf(stderr, "Vigik v%s\n\n", VERSION);
