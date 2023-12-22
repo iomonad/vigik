@@ -37,7 +37,8 @@
 #define VERSION "0.0.1"
 
 static bool dry_run = false, debug = false, memory_view = false;
-static char *pk = NULL, *dump = NULL, *output = NULL;
+static char *pk = NULL, *dump = NULL,
+    *output = NULL, cmd_root[32], cmd_sub[32];
 
 //
 // MF1S50YYX Operations
@@ -141,7 +142,7 @@ static Vigik_Cartdrige *vigik_allocate_cartdrige(const char *path) {
     return cartdrige;
 }
 
-Vigik_Cartdrige *vigik_duplicate_cartdrige(Vigik_Cartdrige *cartdrige) {
+Vigik_Cartdrige *vigik_duplicate_cartdrige(const Vigik_Cartdrige *cartdrige) {
     Vigik_Cartdrige *copy = NULL;
 
     if (cartdrige == NULL) {
@@ -340,7 +341,7 @@ static void usage(char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-    int  c;
+    int  c, idx = 0;
 
     while ((c = getopt (argc, argv, "k:i:vcdo:")) != -1) {
 	switch (c) {
@@ -372,13 +373,24 @@ int main(int argc, char *argv[]) {
 	}
     }
 
-    if (pk == NULL || dump == NULL || output == NULL ) {
-	usage(argv);
+    for (size_t index = optind; index < argc; index++) {
+        if (idx == 0) {
+            strcpy(cmd_root, argv[index]);
+        } else if (idx == 1 ) {
+            strcpy(cmd_sub, argv[index]);
+        }
+        idx++;
     }
 
-    if (!vigik_process_signature()) {
-	fprintf(stderr, "fatal: error processing signature\n");
-	return 1;
+    if (strcmp(cmd_root, "sign") == 0) {
+        if (!vigik_process_signature()) {
+            fprintf(stderr, "fatal: error processing signature\n");
+            return 1;
+        }
+    } else if (strcmp(cmd_root, "generate") == 0) {
+
+    } else {
+        usage(argv);
     }
     return 0;
 }
