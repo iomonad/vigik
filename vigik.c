@@ -183,9 +183,7 @@ static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
 	  size_t key_sector = (sector * MF1S50YYX_SECTOR_SIZE) + 4;
 	  size_t key_memory_segment = ((MF1S50YYX_BLOCK_SIZE * (key_sector - 1)) + 0x0);
 
-	  VIGIK_CRYPTO_B_KEY[0] = 0;
 	  for (size_t i = 0; i < 6 ; i++) {
-
 	       size_t b_offset = (i + 0xA);
 	       if (((sector == 0) ? VIGIK_CRYPTO_AZERO_KEY[i]
 		    : VIGIK_CRYPTO_A_KEY[i]) !=
