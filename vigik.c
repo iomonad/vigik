@@ -36,7 +36,7 @@
 
 #define VERSION "0.0.1"
 
-static bool dry_run = false, debug = false;
+static bool dry_run = false, debug = false, memory_view = false;
 static char *pk = NULL, *dump = NULL, *output = NULL;
 
 //
@@ -56,7 +56,7 @@ static uint8_t *mf1s50yyx_allocate_memory_slot(void) {
      uint8_t *slot = NULL;
 
      if ((slot = (uint8_t*)malloc(MF1S50YYX_MEMORY_SIZE * sizeof(uint8_t))) == NULL) {
-	  printf("allocate: malloc() error\n");
+	  printf("[E] allocate: malloc() error\n");
 	  return NULL;
      }
 
@@ -69,7 +69,7 @@ static bool mf1s50yyx_release_memory_slot(uint8_t *buffer) {
 	  free(buffer);
 	  return true;
      } else {
-	  printf("warn: buffer already released\n");
+	  printf("[W] vigik: buffer already released\n");
 	  return false;
      }
 }
@@ -80,8 +80,7 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
      FILE *fp = fopen(path, "rb");
 
      if (fp == NULL) {
-	  printf("error: bad dump input\n");
-
+	  printf(RED "[E] vigik: bad dump input\n" CRESET);
 	  exit(EXIT_FAILURE);
      }
 
@@ -92,7 +91,7 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
      fread(slot, len, 1, fp);
 
      if (len != MF1S50YYX_MEMORY_SIZE) {
-	  printf("error: bad dump memory size (%ld)\n", len);
+	  printf("[E] vigik: bad dump memory size (%ld)\n", len);
 	  exit(EXIT_FAILURE);
      }
      fclose(fp);
@@ -106,15 +105,17 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
 static Vigik_Cartdrige *vigik_allocate_cartdrige(const char *path) {
      Vigik_Cartdrige *cartdrige = NULL;
 
+     fprintf(stdout, "[I] vigik: %sallocating cartdrige from %s\n" CRESET, YEL, path);
+
      if ((cartdrige = (Vigik_Cartdrige*)malloc(sizeof(Vigik_Cartdrige))) == NULL) {
-	  fprintf(stderr, "error: vigik cartdrige allocation\n");
+	  fprintf(stderr, "[E] vigik: cartdrige allocation\n");
 	  exit(EXIT_FAILURE);
      }
 
      cartdrige->MF1S50YYX_memory_slot = mf1s50yyx_allocate_memory_slot();
 
      if (!mf1s50yyx_fill_memory_slot(path, cartdrige->MF1S50YYX_memory_slot)) {
-	  fprintf(stderr, "error: cartdrige->MF1S50YYX_memory_slot fill\n");
+	  fprintf(stderr, "[E] vigik: withcartdrige->MF1S50YYX_memory_slot fill\n");
 	  exit(EXIT_FAILURE);
      }
      return cartdrige;
@@ -128,7 +129,7 @@ static Vigik_Cartdrige *vigik_duplicate_cartdrige(Vigik_Cartdrige *cartdrige) {
      }
 
      if ((copy = (Vigik_Cartdrige*)malloc(sizeof(Vigik_Cartdrige))) == NULL) {
-	  fprintf(stderr, "error: vigik cartdrige allocation\n");
+	  fprintf(stderr, "[E] vigik: vigik cartdrige allocation\n");
 	  exit(EXIT_FAILURE);
      }
 
@@ -178,8 +179,10 @@ static void vigik_dump_cartdrige_memory(FILE *fd, Vigik_Cartdrige *cartdrige) {
 }
 
 static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
+     fprintf(stdout, "[I] vigik: checking memory keys [");
      for (size_t sector = 0; sector < MF1S50YYX_SECTOR_COUNT; sector++) {
 
+	  printf((sector == 0 ) ? GRN : BLKHB "%.02lX " CRESET, sector);
 	  size_t key_sector = (sector * MF1S50YYX_SECTOR_SIZE) + 4;
 	  size_t key_memory_segment = ((MF1S50YYX_BLOCK_SIZE * (key_sector - 1)) + 0x0);
 
@@ -206,6 +209,8 @@ static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
 	       }
 	  }
      }
+     fprintf(stdout, "] ");
+     fprintf(stdout, "%sVALIDATED\n" CRESET, GRN);
 }
 
 static void vigik_inspect_cartdrige(Vigik_Cartdrige *cartdrige) {
@@ -224,7 +229,7 @@ static bool vigik_process_signature(void) {
 
      vigik_inspect_cartdrige(cartdrige);
 
-     if (debug) {
+     if (memory_view) {
 	  vigik_dump_cartdrige_memory(stdout, cartdrige);
      }
 
@@ -251,7 +256,7 @@ static void usage(char *argv[]) {
 int main(int argc, char *argv[]) {
      int  c;
 
-     while ((c = getopt (argc, argv, "k:i:cdo:")) != -1) {
+     while ((c = getopt (argc, argv, "k:i:vcdo:")) != -1) {
 	  switch (c) {
 	  case 'k':
 	       pk = optarg;
@@ -261,6 +266,9 @@ int main(int argc, char *argv[]) {
 	       break;
 	  case 'o':
 	       output = optarg;
+	       break;
+	  case 'v':
+	       memory_view = true;
 	       break;
 	  case 'd':
 	       debug = true;
