@@ -214,7 +214,7 @@ static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
                              &signed_vigik_sector,
                              &signed_buffer_size);
 
-    if (signed_buffer_size != 0x90) {
+    if (signed_buffer_size != 0x80) {
         fprintf(stderr, "[W] %s: %sRSA signature don't have expected size (%ld bits)\n"
                 CRESET, __func__, RED, signed_buffer_size);
     }
