@@ -57,7 +57,7 @@ static uint8_t *mf1s50yyx_allocate_memory_slot(void) {
     uint8_t *slot = NULL;
 
     if ((slot = (uint8_t*)malloc(MF1S50YYX_MEMORY_SIZE * sizeof(uint8_t))) == NULL) {
-	printf("[E] allocate: malloc() error\n");
+	printf("[E] %s: malloc() error\n", __func__);
 	return NULL;
     }
 
@@ -70,7 +70,7 @@ static bool mf1s50yyx_release_memory_slot(uint8_t *buffer) {
 	free(buffer);
 	return true;
     } else {
-	printf("[W] vigik: buffer already released\n");
+	printf("[W] %s: buffer already released\n", __func__);
 	return false;
     }
 }
@@ -81,7 +81,7 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
     FILE *fp = fopen(path, "rb");
 
     if (fp == NULL) {
-	printf(RED "[E] vigik: bad dump input\n" CRESET);
+	printf(RED "[E] %s: bad dump input\n" CRESET, __func__);
 	exit(EXIT_FAILURE);
     }
 
@@ -92,7 +92,8 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
     fread(slot, len, 1, fp);
 
     if (len != MF1S50YYX_MEMORY_SIZE) {
-	printf("[E] vigik: %sbad dump memory size '%ld', expected %d for MF1S50YYX\n" CRESET,
+	printf("[E] %s: %sbad dump memory size '%ld', expected %d for MF1S50YYX\n" CRESET,
+               __func__,
 	       RED,
 	       len, MF1S50YYX_MEMORY_SIZE);
 	exit(EXIT_FAILURE);
@@ -107,12 +108,37 @@ static uint8_t *mf1s50yyx_read_range(const uint8_t *memory,
     uint8_t *spectrum = NULL;
 
     if ((spectrum = (uint8_t*)malloc(range *sizeof(uint8_t))) == NULL) {
-	fprintf(stderr, "[E] vigik: range reader allocator failure\n");
+	fprintf(stderr, "[E] %s: range reader allocator failure\n", __func__);
 	exit(EXIT_FAILURE);
     }
 
     return memcpy(spectrum, (memory + start), range);
 }
+
+static void mf1s50yyx_write_range(uint8_t *memory, size_t start,
+                                  size_t end, const uint8_t *mutated_buffer) {
+    size_t range = (end - start);
+
+    if (memory == NULL || mutated_buffer == NULL) {
+        return ;
+    }
+
+    if ((end - start) != sizeof(mutated_buffer) / sizeof(uint8_t)) {
+        fprintf(stdout, "[W] %s: %sbuffer size is different from write range\n",
+                __func__, YEL);
+    }
+
+    memcpy((memory + start), mutated_buffer, range);
+}
+
+static void mf1s50yyx_mutate_range(uint8_t *memory, size_t start,
+                                   size_t end, void (*mutator_kb)(uint8_t*)) {
+    uint8_t *to_mutate = mf1s50yyx_read_range(memory, start, end);
+
+    mutator_kb(to_mutate);
+    mf1s50yyx_write_range(memory, start, end, to_mutate);
+}
+
 
 //
 // VIGIK OPERATIONS
@@ -121,17 +147,17 @@ static uint8_t *mf1s50yyx_read_range(const uint8_t *memory,
 static Vigik_Cartdrige *vigik_allocate_cartdrige(const char *path) {
     Vigik_Cartdrige *cartdrige = NULL;
 
-    fprintf(stdout, "[I] vigik: allocating cartdrige from%s %s\n" CRESET, YEL, path);
+    fprintf(stdout, "[I] %s: allocating cartdrige from%s %s\n" CRESET, __func__, YEL, path);
 
     if ((cartdrige = (Vigik_Cartdrige*)malloc(sizeof(Vigik_Cartdrige))) == NULL) {
-	fprintf(stderr, "[E] vigik: cartdrige allocation\n");
+	fprintf(stderr, "[E] %s: cartdrige allocation\n", __func__);
 	exit(EXIT_FAILURE);
     }
 
     cartdrige->MF1S50YYX_memory_slot = mf1s50yyx_allocate_memory_slot();
 
     if (!mf1s50yyx_fill_memory_slot(path, cartdrige->MF1S50YYX_memory_slot)) {
-	fprintf(stderr, "[E] vigik: withcartdrige->MF1S50YYX_memory_slot fill\n");
+	fprintf(stderr, "[E] %s: withcartdrige->MF1S50YYX_memory_slot fill\n", __func__);
 	exit(EXIT_FAILURE);
     }
 
@@ -150,7 +176,7 @@ Vigik_Cartdrige *vigik_duplicate_cartdrige(const Vigik_Cartdrige *cartdrige) {
     }
 
     if ((copy = (Vigik_Cartdrige*)malloc(sizeof(Vigik_Cartdrige))) == NULL) {
-	fprintf(stderr, "[E] vigik: vigik cartdrige allocation\n");
+	fprintf(stderr, "[E] %s: vigik cartdrige allocation\n", __func__);
 	exit(EXIT_FAILURE);
     }
 
@@ -203,7 +229,7 @@ static void vigik_dump_cartdrige_memory(FILE *fd, Vigik_Cartdrige *cartdrige) {
 }
 
 static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
-    fprintf(stdout, "[I] vigik: checking memory keys:");
+    fprintf(stdout, "[I] %s: checking memory keys:", __func__);
     if (debug) {
 	printf("\n");
     }
@@ -255,7 +281,7 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 
     if ((cartdrige->MF1S50YYX_uid =
 	 mf1s50yyx_read_range(cartdrige->MF1S50YYX_memory_slot, 0x0, 0x4)) != NULL) {
-	fprintf(stdout, "[I] vigik: detected Card UID " GRN);
+	fprintf(stdout, "[I] %s: detected Card UID " GRN, __func__);
 	for (size_t i = 0; i < 4; i++) {
 	    fprintf(stdout, "%.02X", cartdrige->MF1S50YYX_uid[i]);
 	}
@@ -264,14 +290,14 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 
     if ((cartdrige->MF1S50YYX_sak =
 	 mf1s50yyx_read_range(cartdrige->MF1S50YYX_memory_slot, 0x5, 0x6)) != NULL) {
-	fprintf(stdout, "[I] vigik: detected Card SAK " GRN);
+	fprintf(stdout, "[I] %s: detected Card SAK " GRN, __func__);
 	fprintf(stdout, "%.02X", cartdrige->MF1S50YYX_sak[0]);
 	fprintf(stdout, CRESET"\n");
     }
 
     if ((cartdrige->MF1S50YYX_atqa =
 	 mf1s50yyx_read_range(cartdrige->MF1S50YYX_memory_slot, 0x6, 0x8)) != NULL) {
-	fprintf(stdout, "[I] vigik: detected Card ATQA " GRN);
+	fprintf(stdout, "[I] %s: detected Card ATQA " GRN, __func__);
 	fprintf(stdout, "%.02X", cartdrige->MF1S50YYX_atqa[0]);
 	fprintf(stdout, "%.02X", cartdrige->MF1S50YYX_atqa[1]);
 	fprintf(stdout, CRESET"\n");
@@ -283,24 +309,25 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 			       ((MF1S50YYX_BLOCK_SIZE * 5) + 0x4));
     if (strcmp((char*)service, (char*)"\xAA\x07") == 0) {
 	cartdrige->service = Poste_Service_Universel;
-	fprintf(stdout, "[I] vigik: detected Card Service: %s Poste Service Universel\n" CRESET, GRN);
+	fprintf(stdout, "[I] %s: detected Card Service: %sPoste Service Universel\n" CRESET, __func__, GRN);
     } else if (strcmp((char*)service, (char*)"\xAB\x07") == 0) {
 	cartdrige->service = Poste_Autres_Services;
-	fprintf(stdout, "[I] vigik: detected Card Service: %s Poste Autres Service\n" CRESET, GRN);
+	fprintf(stdout, "[I] %s: detected Card Service: %sPoste Autres Service\n" CRESET, __func__, GRN);
     } else if (strcmp((char*)service, (char*)"\xAC\x07") == 0) {
 	cartdrige->service = Edf_Gdf;
-	fprintf(stdout, "[I] vigik: detected Card Service: %s EDF/GDF\n" CRESET, GRN);
+	fprintf(stdout, "[I] %s: detected Card Service: %sEDF/GDF\n" CRESET, __func__, GRN);
     } else if (strcmp((char*)service, (char*)"\xAD\x07") == 0) {
 	cartdrige->service = France_Telecom;
-	fprintf(stdout, "[I] vigik: detected Card Service: %s France Telecom\n" CRESET, GRN);
+	fprintf(stdout, "[I] %s: detected Card Service: %sFrance Telecom\n" CRESET, __func__, GRN);
     } else if (strcmp((char*)service, (char*)"\xA5\x07") == 0) {
 	cartdrige->service = Service_Urgence;
-	fprintf(stdout, "[I] vigik: detected Card Service: %s Service Urgence\n" CRESET, GRN);
+	fprintf(stdout, "[I] %s: detected Card Service: %sService Urgence\n" CRESET, __func__, GRN);
     } else if (strcmp((char*)service, (char*)"\xA6\x07") == 0) {
 	cartdrige->service = Service_Securite;
-	fprintf(stdout, "[I] vigik: detected Card Service: %s Service Securite\n" CRESET, GRN);
+        fprintf(stdout, "[I] %s: detected Card Service: %sService Securite\n" CRESET, __func__,  GRN);
     } else {
 	cartdrige->service = Custom;
+        fprintf(stdout, "[W] %s: detected %sCustom Card Service\n" CRESET, __func__,  YEL);
     }
     free(service);
 }
@@ -309,7 +336,17 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 // ENTRYPOINT
 //
 
-static bool vigik_process_signature(void) {
+void mutate_uid(uint8_t *data) {
+    bzero(data, 4);
+}
+
+static void vigik_process_signature(void) {
+    if (dump == NULL || output == NULL || pk == NULL) {
+        fprintf(stderr, "[E] %s: %smissing required arguments [-kdo]\n"
+                CRESET, __func__, RED);
+        exit(1);
+    }
+
     Vigik_Cartdrige *cartdrige = NULL;
 
     cartdrige = vigik_allocate_cartdrige(dump);
@@ -317,33 +354,36 @@ static bool vigik_process_signature(void) {
     vigik_read_properties(cartdrige);
     vigik_inspect_cartdrige(cartdrige);
 
+    mf1s50yyx_mutate_range(cartdrige->MF1S50YYX_memory_slot, 0, 4, mutate_uid);
+
     if (memory_view) {
 	vigik_dump_cartdrige_memory(stdout, cartdrige);
     }
 
     vigik_release_cartdrige(cartdrige);
-    return true;
 }
 
 static void usage(char *argv[]) {
     fprintf(stderr, "Vigik v%s\n\n", VERSION);
-    fprintf(stderr, "Usage: %s -k private.key -i mifare_dump.bin -o new_signed_memory.bin\n\nOptions:\n",
-	    argv[0]);
-    fprintf(stderr, "  -k  |  Private key to use\n");
-    fprintf(stderr, "  -i  |  Proxmark3 Binary dump\n");
-    fprintf(stderr, "  -o  |  Output dump\n");
-    fprintf(stderr, "  -d  |  Enable debug\n");
-    fprintf(stderr, "  -c  |  Enable Dryrun mode\n");
-    fprintf(stderr, "  -v  |  View Memory\n");
-    fprintf(stderr, "\n");
-
+    fprintf(stderr, "Signature: %s sign -k private.key -i mifare_dump.bin -o new_signed_memory.bin\n", argv[0]);
+    fprintf(stderr, "Generate: %s generate -k private.key -o generated.bin\n\nOptions:\n", argv[0]);
+    fprintf(stderr, "   -k %sPrivate key file\n" CRESET, BLU);
+    fprintf(stderr, "   -i %sProxmark3 binary dump\n" CRESET, BLU);
+    fprintf(stderr, "   -o %sOutput file to produce\n" CRESET, BLU);
+    fprintf(stderr, "   -v %sDump memory to STDOUT\n" CRESET, BLU);
+    fprintf(stderr, "   -d %sEnable debbuging\n" CRESET, BLU);
+    fprintf(stderr, "   -c %sActivate dry-run mode\n" CRESET, BLU);
+    fprintf(stderr, "   -h %sShow this help\n" CRESET, BLU);
     exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[]) {
     int  c, idx = 0;
+    cmd_dispatcher dispatcher[] = {
+        {"sign", &vigik_process_signature},
+    };
 
-    while ((c = getopt (argc, argv, "k:i:vcdo:")) != -1) {
+    while ((c = getopt (argc, argv, "k:i:vhcdo:")) != -1) {
 	switch (c) {
 	case 'k':
 	    pk = optarg;
@@ -363,6 +403,9 @@ int main(int argc, char *argv[]) {
 	case 'c':
 	    dry_run = true;
 	    break;
+        case 'h':
+            usage(argv);
+            break;
 	case '?':
 	    if (optopt == 'k' || optopt == 'i' || optopt == 'o') {
 		fprintf(stderr, "option -%c requires argument\n", optopt);
@@ -376,21 +419,25 @@ int main(int argc, char *argv[]) {
     for (size_t index = optind; index < argc; index++) {
         if (idx == 0) {
             strcpy(cmd_root, argv[index]);
-        } else if (idx == 1 ) {
+        } else if (idx == 1) {
             strcpy(cmd_sub, argv[index]);
+        } else {
+            break ;
         }
-        idx++;
     }
 
-    if (strcmp(cmd_root, "sign") == 0) {
-        if (!vigik_process_signature()) {
-            fprintf(stderr, "fatal: error processing signature\n");
-            return 1;
-        }
-    } else if (strcmp(cmd_root, "generate") == 0) {
-
-    } else {
+    if (cmd_root[0] == 0x0) {
         usage(argv);
     }
-    return 0;
+
+    for (size_t i = 0; i < (sizeof(cmd_dispatcher) / sizeof(dispatcher[0])); i++) {
+        if (strcmp(cmd_root, dispatcher[i].cmd) == 0) {
+            dispatcher[i].handler();
+            goto _cleanup;
+        }
+    }
+    usage(argv);
+
+ _cleanup:
+    exit(EXIT_SUCCESS);
 }
