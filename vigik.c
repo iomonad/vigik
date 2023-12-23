@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <stdbool.h>
+
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
@@ -39,7 +40,6 @@
 static bool dry_run = false, debug = false, memory_view = false;
 static char *pk = NULL, *dump = NULL,
     *output = NULL, cmd_root[32], cmd_sub[32];
-
 //
 // MF1S50YYX Operations
 //
@@ -81,7 +81,7 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
     FILE *fp = fopen(path, "rb");
 
     if (fp == NULL) {
-	printf(RED "[E] %s: bad dump input\n" CRESET, __func__);
+	printf("[E] %s: %s bad dump input\n" CRESET, RED,  __func__);
 	exit(EXIT_FAILURE);
     }
 
@@ -108,7 +108,7 @@ static uint8_t *mf1s50yyx_read_range(const uint8_t *memory,
     uint8_t *spectrum = NULL;
 
     if ((spectrum = (uint8_t*)malloc(range *sizeof(uint8_t))) == NULL) {
-	fprintf(stderr, "[E] %s: range reader allocator failure\n", __func__);
+	fprintf(stderr, CRESET "[E] %s: %srange reader allocator failure\n" CRESET,  __func__, YEL);
 	exit(EXIT_FAILURE);
     }
 
@@ -124,14 +124,14 @@ static void mf1s50yyx_write_range(uint8_t *memory, size_t start,
     }
 
     if ((end - start) != sizeof(mutated_buffer) / sizeof(uint8_t)) {
-        fprintf(stdout, "[W] %s: %sbuffer size is different from write range\n",
+        fprintf(stdout, "[W] %s: %sbuffer size is different from write range\n" CRESET,
                 __func__, YEL);
     }
 
     memcpy((memory + start), mutated_buffer, range);
 }
 
-static void mf1s50yyx_mutate_range(uint8_t *memory, size_t start,
+void mf1s50yyx_mutate_range(uint8_t *memory, size_t start,
                                    size_t end, void (*mutator_kb)(uint8_t*)) {
     uint8_t *to_mutate = mf1s50yyx_read_range(memory, start, end);
 
@@ -139,6 +139,94 @@ static void mf1s50yyx_mutate_range(uint8_t *memory, size_t start,
     mf1s50yyx_write_range(memory, start, end, to_mutate);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+static RSA *vigik_crypto_load_private_key(const char *path) {
+    RSA *private_key = NULL;
+    FILE *fp = NULL;
+
+    if ((fp = fopen(path, "r")) == NULL) {
+        fprintf(stdout, "[W] %s: %sissue with private key loading\n" CRESET,
+                __func__, YEL);
+
+        exit(EXIT_FAILURE);
+    }
+    private_key = PEM_read_RSAPrivateKey(fp, NULL, NULL, NULL);
+    fclose(fp);
+
+    if (debug) {
+        fprintf(stdout, "[I] %s: loaded RSA private key %s%s\n" CRESET,
+                __func__, BLU, path);
+    }
+    return private_key;
+}
+
+static void vigik_crypto_release_private_key(RSA *key) {
+    RSA_free(key);
+
+    return ;
+}
+
+static void vigik_crypto_sign_buffer(RSA *pk, const uint8_t *buffer, size_t buff_size,
+                                     unsigned char **buffer_encrypted,
+                                     size_t *lread) {
+    EVP_MD_CTX *m_RSASignCtx = EVP_MD_CTX_create();
+    EVP_PKEY   *priKey  = EVP_PKEY_new();
+
+    EVP_PKEY_assign_RSA(priKey, pk);
+
+    if (EVP_DigestSignInit(m_RSASignCtx, NULL, EVP_sha256(), NULL, priKey) <= 0) {
+        fprintf(stderr, "[E] %s: rsa sign init\n", __func__);
+        return ;
+    }
+    if (EVP_DigestSignUpdate(m_RSASignCtx, buffer, buff_size) <= 0) {
+        fprintf(stderr, "[E] %s: rsa digest sign update\n", __func__);
+        return ;
+    }
+    if (EVP_DigestSignFinal(m_RSASignCtx, NULL, lread) <=0) {
+        fprintf(stderr, "[E] %s: rsa digest final\n", __func__);
+        return ;
+    }
+
+    *buffer_encrypted = (unsigned char*)malloc(*lread);
+    if (EVP_DigestSignFinal(m_RSASignCtx, *buffer_encrypted, lread) <= 0) {
+        fprintf(stderr, "[E] %s: rsa digest final\n", __func__);
+        return ;
+    }
+
+    EVP_MD_CTX_free(m_RSASignCtx);
+}
+
+#pragma GCC diagnostic pop
+
+
+static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
+    uint8_t *vigik_sectors = NULL;
+    unsigned char *signed_vigik_sector = NULL;
+    size_t signed_buffer_size;
+
+    vigik_sectors = mf1s50yyx_read_range(cartdrige->MF1S50YYX_memory_slot,
+                                         0x40, 0x80);
+
+    vigik_crypto_sign_buffer(pk, vigik_sectors,
+                             (MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE),
+                             &signed_vigik_sector,
+                             &signed_buffer_size);
+
+    if (signed_buffer_size != 0x90) {
+        fprintf(stderr, "[W] %s: %sRSA signature don't have expected size (%ld bits)\n"
+                CRESET, __func__, RED, signed_buffer_size);
+    }
+
+    for (size_t s = 0x2; s < 0x5; s++) {
+        mf1s50yyx_write_range(cartdrige->MF1S50YYX_memory_slot,
+                              ((MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE) * s),
+                              ((MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE) * s) + (0x3 * MF1S50YYX_BLOCK_SIZE),
+                              signed_vigik_sector + ((MF1S50YYX_BLOCK_SIZE * 3) * (s - 0x2)));
+    }
+
+}
 
 //
 // VIGIK OPERATIONS
@@ -229,7 +317,7 @@ static void vigik_dump_cartdrige_memory(FILE *fd, Vigik_Cartdrige *cartdrige) {
 }
 
 static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
-    fprintf(stdout, "[I] %s: checking memory keys:", __func__);
+    fprintf(stdout, "[I] %s: checking memory keys:" CRESET, __func__);
     if (debug) {
 	printf("\n");
     }
@@ -271,6 +359,7 @@ static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
     if (!debug) {
 	fprintf(stdout, GRN " VALID\n" CRESET);
     }
+    printf(CRESET);
 }
 
 static void vigik_inspect_cartdrige(Vigik_Cartdrige *cartdrige) {
@@ -346,20 +435,26 @@ static void vigik_process_signature(void) {
                 CRESET, __func__, RED);
         exit(1);
     }
-
+    RSA *private_key = NULL;
     Vigik_Cartdrige *cartdrige = NULL;
 
+    private_key = vigik_crypto_load_private_key(pk);
     cartdrige = vigik_allocate_cartdrige(dump);
 
     vigik_read_properties(cartdrige);
     vigik_inspect_cartdrige(cartdrige);
 
-    mf1s50yyx_mutate_range(cartdrige->MF1S50YYX_memory_slot, 0, 4, mutate_uid);
+    if (memory_view) {
+	vigik_dump_cartdrige_memory(stdout, cartdrige);
+    }
+
+    vigik_sign_sectors(private_key, cartdrige);
 
     if (memory_view) {
 	vigik_dump_cartdrige_memory(stdout, cartdrige);
     }
 
+    vigik_crypto_release_private_key(private_key);
     vigik_release_cartdrige(cartdrige);
 }
 
