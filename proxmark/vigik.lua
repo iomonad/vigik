@@ -88,6 +88,10 @@ local function main(args)
    if not status == 0 then
       return oops('error while running Vigik binary')
    end
+
+   core.clearCommandBuffer()
+   core.console(('hf mf restore --1k --uid deadbeef -k %s')
+      :format(generated))
 end
 
 
