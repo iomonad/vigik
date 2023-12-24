@@ -48,3 +48,8 @@ clean:
 	-rm -f $(TARGET)
 
 re: clean all
+
+install: all
+	install ${TARGET} /usr/local/bin
+	mkdir -p ${HOME}/.proxmark3/luascripts/
+	cp proxmark/vigik.lua ${HOME}/.proxmark3/luascripts/

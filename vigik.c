@@ -39,7 +39,8 @@
 
 #define VERSION "0.0.1"
 
-static bool dry_run = false, debug = false, memory_view = false, apply_padding = false;
+static bool dry_run = false, debug = false,
+    memory_view = false, apply_padding = false, quiet = false;
 static char *pk = NULL, *dump = NULL,
     *output = NULL, cmd_root[32], cmd_sub[32];
 //
@@ -627,17 +628,20 @@ static void vigik_process_signature(void) {
 }
 
 static void usage(char *argv[]) {
-    fprintf(stderr, "Vigik v%s\n\n", VERSION);
-    fprintf(stderr, "Signature: %s sign -k private.key -i mifare_dump.bin -o new_signed_memory.bin\n", argv[0]);
-    fprintf(stderr, "Generate: %s generate -k private.key -o generated.bin\n\nOptions:\n", argv[0]);
-    fprintf(stderr, "   -k %sPrivate key file\n" CRESET, BLU);
-    fprintf(stderr, "   -i %sProxmark3 binary dump\n" CRESET, BLU);
-    fprintf(stderr, "   -o %sOutput file to produce\n" CRESET, BLU);
-    fprintf(stderr, "   -v %sDump memory to STDOUT\n" CRESET, BLU);
-    fprintf(stderr, "   -d %sEnable debbuging\n" CRESET, BLU);
-    fprintf(stderr, "   -c %sActivate dry-run mode\n" CRESET, BLU);
-    fprintf(stderr, "   -h %sShow this help\n" CRESET, BLU);
-    exit(EXIT_FAILURE);
+    if (!quiet) {
+        fprintf(stderr, "Vigik v%s\n\n", VERSION);
+        fprintf(stderr, "Signature: %s sign -k private.key -i mifare_dump.bin -o new_signed_memory.bin\n", argv[0]);
+        fprintf(stderr, "Generate: %s generate -k private.key -o generated.bin\n\nOptions:\n", argv[0]);
+        fprintf(stderr, "   -k %sPrivate key file\n" CRESET, BLU);
+        fprintf(stderr, "   -i %sProxmark3 binary dump\n" CRESET, BLU);
+        fprintf(stderr, "   -o %sOutput file to produce\n" CRESET, BLU);
+        fprintf(stderr, "   -v %sDump memory to STDOUT\n" CRESET, BLU);
+        fprintf(stderr, "   -d %sEnable debbuging\n" CRESET, BLU);
+        fprintf(stderr, "   -c %sActivate dry-run mode\n" CRESET, BLU);
+        fprintf(stderr, "   -q %sEnter quiet mode\n" CRESET, BLU);
+        fprintf(stderr, "   -h %sShow this help\n" CRESET, BLU);
+        exit(EXIT_FAILURE);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -646,7 +650,7 @@ int main(int argc, char *argv[]) {
         {"sign", &vigik_process_signature},
     };
 
-    while ((c = getopt (argc, argv, "k:i:vhpcdo:")) != -1) {
+    while ((c = getopt (argc, argv, "k:i:vhqpcdo:")) != -1) {
 	switch (c) {
 	case 'k':
 	    pk = optarg;
@@ -668,6 +672,9 @@ int main(int argc, char *argv[]) {
 	    break;
         case 'p':
             apply_padding = true;
+            break;
+        case 'q':
+            quiet = false;
             break;
         case 'h':
             usage(argv);
