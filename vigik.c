@@ -210,7 +210,7 @@ static void vigik_echo_rsa_signature(unsigned char *signed_sector) {
             }
             printf("%.02X ", signed_sector[i]);
         }
-        printf(CRESET "\n[I] %s:\t\t%s-----END RSA SIGNATURE-----\n\n"
+        printf(CRESET "\n[I] %s:\t\t%s-----END RSA SIGNATURE-----\n"
                CRESET, __func__, BLU);
     }
 }
@@ -566,6 +566,7 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 static void vigik_write_cartdrige_to_file(const Vigik_Cartdrige *cartdrige,
                                           const char *output) {
     FILE *fp = NULL;
+    size_t wsize;
 
     if ((fp = fopen(output, "wb")) == NULL) {
         fprintf(stderr, "[E] %s: %serror while writing file %s\n" CRESET,
@@ -573,11 +574,15 @@ static void vigik_write_cartdrige_to_file(const Vigik_Cartdrige *cartdrige,
         exit(EXIT_FAILURE);
     }
 
-    if (fwrite(cartdrige->MF1S50YYX_memory_slot, 0x10, 0x100, fp) != 0x100) {
-        fprintf(stderr, "[E] %s: %scorrupted file written for %s\n" CRESET,
-                __func__, RED, output);
+    if ((wsize = fwrite(cartdrige->MF1S50YYX_memory_slot, 0x10, 0x40, fp)) != 0x40) {
+        fprintf(stderr, "[E] %s: %scorrupted file written for %s (%ld/1024)\n" CRESET,
+                __func__, RED, output, wsize);
         exit(EXIT_FAILURE);
     }
+
+    fclose(fp);
+
+    printf("[I] %s: new dump successfuly written to %s%s\n" CRESET,  __func__, GRN, output);
 }
 
 //
