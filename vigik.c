@@ -34,10 +34,11 @@
 
 #include "vigik.h"
 #include "ansicode.h"
+#include "iso9796_1.h"
 
 #define VERSION "0.0.1"
 
-static bool dry_run = false, debug = false, memory_view = false;
+static bool dry_run = false, debug = false, memory_view = false, apply_padding = false;
 static char *pk = NULL, *dump = NULL,
     *output = NULL, cmd_root[32], cmd_sub[32];
 //
@@ -168,6 +169,49 @@ static void vigik_crypto_release_private_key(RSA *key) {
     return ;
 }
 
+static void vigik_echo_rsa_signature(unsigned char *signed_sector) {
+    if (signed_sector != NULL) {
+        printf("\n-----BEGIN RSA SIGNATURE-----");
+        for (size_t i = 0; signed_sector[i] != 0x0; i++) {
+            if ((i % 16) == 0) {
+                printf("\n");
+            }
+            printf("%.02X ", signed_sector[i]);
+        }
+        printf("\n-----END RSA SIGNATURE-----\n\n");
+    }
+}
+
+static void vigik_crypto_iso_9796_1_padding(unsigned char **encrypted_buffer) {
+    ISO9796D1Encoding enc;
+
+    enc.pad_bits = 8;
+    enc.bit_size = 1024;
+
+    uint32_t block_length = iso9796_1_get_blk_size(&enc);
+    uint32_t real_block_length = block_length;
+
+    uint8_t block[block_length];
+
+    if (iso9796_1_encode(&enc, *encrypted_buffer, 0,
+                         sizeof(*encrypted_buffer), block, block_length,
+                         &real_block_length)
+        < 0) {
+        printf("[E] %s: %s error while encoding RSA signature\n" CRESET
+               , __func__, RED);
+        exit(EXIT_FAILURE);
+    } else {
+        if (debug) {
+            vigik_echo_rsa_signature((unsigned char *)block);
+        }
+
+        if (real_block_length != block_length) {
+            printf("[W] %s: %spadding block size divergences %d %d\n" CRESET, __func__, RED, real_block_length, block_length);
+        }
+        memcpy(*encrypted_buffer, block, real_block_length);
+    }
+}
+
 static void vigik_crypto_sign_buffer(RSA *pk, const uint8_t *buffer, size_t buff_size,
                                      unsigned char **buffer_encrypted,
                                      size_t *lread) {
@@ -200,7 +244,6 @@ static void vigik_crypto_sign_buffer(RSA *pk, const uint8_t *buffer, size_t buff
 
 #pragma GCC diagnostic pop
 
-
 static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
     uint8_t *vigik_sectors = NULL;
     unsigned char *signed_vigik_sector = NULL;
@@ -217,6 +260,12 @@ static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
     if (signed_buffer_size != 0x80) {
         fprintf(stderr, "[W] %s: %sRSA signature don't have expected size (%ld bits)\n"
                 CRESET, __func__, RED, signed_buffer_size);
+    }
+
+    vigik_echo_rsa_signature(signed_vigik_sector);
+
+    if (apply_padding) {
+        vigik_crypto_iso_9796_1_padding(&signed_vigik_sector);
     }
 
     for (size_t s = 0x2; s < 0x5; s++) {
@@ -478,7 +527,7 @@ int main(int argc, char *argv[]) {
         {"sign", &vigik_process_signature},
     };
 
-    while ((c = getopt (argc, argv, "k:i:vhcdo:")) != -1) {
+    while ((c = getopt (argc, argv, "k:i:vhpcdo:")) != -1) {
 	switch (c) {
 	case 'k':
 	    pk = optarg;
@@ -498,6 +547,9 @@ int main(int argc, char *argv[]) {
 	case 'c':
 	    dry_run = true;
 	    break;
+        case 'p':
+            apply_padding = true;
+            break;
         case 'h':
             usage(argv);
             break;
