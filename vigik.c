@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -169,20 +170,48 @@ static void vigik_crypto_release_private_key(RSA *key) {
     return ;
 }
 
+static void vigik_mutate_access_counter(uint8_t *chunk) {
+    chunk[0]++;
+}
+
+static void vigik_mutate_loading_date(uint8_t *chunk) {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+
+    chunk[0] = tm.tm_year;
+    chunk[1] = tm.tm_mon + 1;
+    chunk[2] = tm.tm_mday;
+    chunk[3] = tm.tm_hour;
+    chunk[4] = tm.tm_min;
+}
+
+
+
 static void vigik_actualize_fields(Vigik_Cartdrige *cartdrige) {
+
+    mf1s50yyx_mutate_range(cartdrige->MF1S50YYX_memory_slot,
+                           (MF1S50YYX_BLOCK_SIZE * 4),
+                           ((MF1S50YYX_BLOCK_SIZE * 4) + 0x4),
+                           vigik_mutate_access_counter);
+    mf1s50yyx_mutate_range(cartdrige->MF1S50YYX_memory_slot,
+                           ((MF1S50YYX_BLOCK_SIZE * 6) + 0x9),
+                           ((MF1S50YYX_BLOCK_SIZE * 6) + 0x14),
+                           vigik_mutate_loading_date);
     return;
 }
 
 static void vigik_echo_rsa_signature(unsigned char *signed_sector) {
     if (signed_sector != NULL) {
-        printf("\n-----BEGIN RSA SIGNATURE-----");
+        printf("[I] %s:\t\t%s-----BEGIN RSA SIGNATURE-----" CRESET,
+               __func__, BLU);
         for (size_t i = 0; signed_sector[i] != 0x0; i++) {
             if ((i % 16) == 0) {
-                printf("\n");
+                printf(CRESET "\n[I] %s:\t%s", __func__, BLU);
             }
             printf("%.02X ", signed_sector[i]);
         }
-        printf("\n-----END RSA SIGNATURE-----\n\n");
+        printf(CRESET "\n[I] %s:\t\t%s-----END RSA SIGNATURE-----\n\n"
+               CRESET, __func__, BLU);
     }
 }
 
@@ -472,6 +501,39 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 	fprintf(stdout, CRESET"\n");
     }
 
+    /* LOADING */
+    uint8_t loading_year =
+        ((cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 6) + 0x9)]) - 0x64);
+    uint8_t loading_month =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 6) + 0xA)]);
+    uint8_t loading_day =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 6) + 0xB)]);
+    uint8_t loading_hour =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 6) + 0xC)]);
+    uint8_t loading_minute =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 6) + 0xD)]);
+
+    fprintf(stdout, "[I] %s: Card loading date: %s20%.02d/%d/%d %.02d:%.02d\n" CRESET,
+            __func__, GRN, loading_year, loading_month, loading_day,
+            loading_hour, loading_minute);
+
+    /* ACCESS */
+    uint8_t access_year =
+        ((cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 5) + 0x9)]) - 0x64);
+    uint8_t access_month =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 5) + 0xA)]);
+    uint8_t access_day =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 5) + 0xB)]);
+    uint8_t access_hour =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 5) + 0xC)]);
+    uint8_t access_minute =
+        (cartdrige->MF1S50YYX_memory_slot[((MF1S50YYX_BLOCK_SIZE * 5) + 0xD)]);
+
+    fprintf(stdout, "[I] %s: Card access date:  %s20%.02d/%d/%.02d %.02d:%.02d\n" CRESET,
+            __func__, GRN, access_year, access_month, access_day,
+            access_hour, access_minute);
+
+
     uint8_t *service
 	= mf1s50yyx_read_range(cartdrige->MF1S50YYX_memory_slot,
 			       (MF1S50YYX_BLOCK_SIZE * 5),
@@ -501,13 +563,26 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
     free(service);
 }
 
+static void vigik_write_cartdrige_to_file(const Vigik_Cartdrige *cartdrige,
+                                          const char *output) {
+    FILE *fp = NULL;
+
+    if ((fp = fopen(output, "wb")) == NULL) {
+        fprintf(stderr, "[E] %s: %serror while writing file %s\n" CRESET,
+                __func__, RED, output);
+        exit(EXIT_FAILURE);
+    }
+
+    if (fwrite(cartdrige->MF1S50YYX_memory_slot, 0x10, 0x100, fp) != 0x100) {
+        fprintf(stderr, "[E] %s: %scorrupted file written for %s\n" CRESET,
+                __func__, RED, output);
+        exit(EXIT_FAILURE);
+    }
+}
+
 //
 // ENTRYPOINT
 //
-
-void mutate_uid(uint8_t *data) {
-    bzero(data, 4);
-}
 
 static void vigik_process_signature(void) {
     if (dump == NULL || output == NULL || pk == NULL) {
@@ -538,6 +613,8 @@ static void vigik_process_signature(void) {
     }
 
     vigik_diff_cartdrige_memory(stdout, cartdrige, next_cartdrige, 5);
+
+    vigik_write_cartdrige_to_file(next_cartdrige, output);
 
     vigik_crypto_release_private_key(private_key);
     vigik_release_cartdrige(cartdrige);
