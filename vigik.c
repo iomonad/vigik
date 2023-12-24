@@ -204,7 +204,7 @@ static void vigik_echo_rsa_signature(unsigned char *signed_sector) {
     if (signed_sector != NULL) {
         printf("[I] %s:\t\t%s-----BEGIN RSA SIGNATURE-----" CRESET,
                __func__, BLU);
-        for (size_t i = 0; signed_sector[i] != 0x0; i++) {
+        for (size_t i = 0; i < 16 * 9; i++) {
             if ((i % 16) == 0) {
                 printf(CRESET "\n[I] %s:\t%s", __func__, BLU);
             }
@@ -407,7 +407,7 @@ static void vigik_diff_cartdrige_memory(FILE *fd, Vigik_Cartdrige *original,
     for (size_t sector = 0; sector < sectors; sector++) {
 	for (size_t zSector = 0 ; zSector < MF1S50YYX_SECTOR_SIZE; zSector++) {
 	    fprintf(fd, CRESET);
-	    fprintf(fd, "%.02ld.%ld/%d.%.02ld\t", sector, zSector + 1, MF1S50YYX_SECTOR_SIZE,
+	    fprintf(fd, "[D] %s: (%.02ld.%ld/%d.%.02ld)  | ", __func__, sector, zSector + 1, MF1S50YYX_SECTOR_SIZE,
 		    (sector * MF1S50YYX_SECTOR_SIZE) + zSector);
 	    for (size_t bIterator = 0; bIterator < MF1S50YYX_BLOCK_SIZE; bIterator++) {
 		size_t real = (sector * (MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE))
