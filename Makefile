@@ -1,5 +1,5 @@
 CC     = cc
-CFLAGS = -Wall -Werror -pedantic
+CFLAGS = -Wall -Werror -pedantic -g -fverbose-asm
 LIBS   = -lcrypto
 TARGET = vigik
 

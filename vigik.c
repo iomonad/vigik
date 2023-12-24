@@ -124,7 +124,7 @@ static void mf1s50yyx_write_range(uint8_t *memory, size_t start,
         return ;
     }
 
-    if ((end - start) != sizeof(mutated_buffer) / sizeof(uint8_t)) {
+    if ((end - start) != (sizeof(mutated_buffer) / sizeof(uint8_t))) {
         fprintf(stdout, "[W] %s: %sbuffer size is different from write range\n" CRESET,
                 __func__, YEL);
     }
@@ -167,6 +167,10 @@ static void vigik_crypto_release_private_key(RSA *key) {
     RSA_free(key);
 
     return ;
+}
+
+static void vigik_actualize_fields(Vigik_Cartdrige *cartdrige) {
+    return;
 }
 
 static void vigik_echo_rsa_signature(unsigned char *signed_sector) {
@@ -322,6 +326,10 @@ Vigik_Cartdrige *vigik_duplicate_cartdrige(const Vigik_Cartdrige *cartdrige) {
 	memcpy(copy->MF1S50YYX_memory_slot,
 	       cartdrige->MF1S50YYX_memory_slot, MF1S50YYX_MEMORY_SIZE);
 
+    copy->MF1S50YYX_uid = cartdrige->MF1S50YYX_uid;
+    copy->MF1S50YYX_atqa = cartdrige->MF1S50YYX_atqa;
+    copy->MF1S50YYX_sak = cartdrige->MF1S50YYX_sak;
+    copy->service = cartdrige->service;
     return copy;
 }
 
@@ -362,6 +370,29 @@ static void vigik_dump_cartdrige_memory(FILE *fd, Vigik_Cartdrige *cartdrige) {
 	    }
 	    fprintf(fd, "\n");
 	}
+    }
+}
+
+static void vigik_diff_cartdrige_memory(FILE *fd, Vigik_Cartdrige *original,
+                                        Vigik_Cartdrige *next, size_t sectors) {
+    for (size_t sector = 0; sector < sectors; sector++) {
+	for (size_t zSector = 0 ; zSector < MF1S50YYX_SECTOR_SIZE; zSector++) {
+	    fprintf(fd, CRESET);
+	    fprintf(fd, "%.02ld.%ld/%d.%.02ld\t", sector, zSector + 1, MF1S50YYX_SECTOR_SIZE,
+		    (sector * MF1S50YYX_SECTOR_SIZE) + zSector);
+	    for (size_t bIterator = 0; bIterator < MF1S50YYX_BLOCK_SIZE; bIterator++) {
+		size_t real = (sector * (MF1S50YYX_SECTOR_SIZE * MF1S50YYX_BLOCK_SIZE))
+		    + (zSector * MF1S50YYX_BLOCK_SIZE) + bIterator;
+                uint8_t a = original->MF1S50YYX_memory_slot[real];
+                uint8_t b = next->MF1S50YYX_memory_slot[real];
+		fprintf(fd, "%s%.02X%s ", ((a != b) ? GRN : BLKHB), b, CRESET);
+	    }
+	    fprintf(fd, "\n");
+	}
+    }
+
+    if (sectors != MF1S50YYX_SECTOR_COUNT) {
+        printf("\t\t ... truncated\n");
     }
 }
 
@@ -485,7 +516,7 @@ static void vigik_process_signature(void) {
         exit(1);
     }
     RSA *private_key = NULL;
-    Vigik_Cartdrige *cartdrige = NULL;
+    Vigik_Cartdrige *cartdrige = NULL, *next_cartdrige = NULL;
 
     private_key = vigik_crypto_load_private_key(pk);
     cartdrige = vigik_allocate_cartdrige(dump);
@@ -497,14 +528,20 @@ static void vigik_process_signature(void) {
 	vigik_dump_cartdrige_memory(stdout, cartdrige);
     }
 
-    vigik_sign_sectors(private_key, cartdrige);
+    next_cartdrige = vigik_duplicate_cartdrige(cartdrige);
+
+    vigik_actualize_fields(next_cartdrige);
+    vigik_sign_sectors(private_key, next_cartdrige);
 
     if (memory_view) {
-	vigik_dump_cartdrige_memory(stdout, cartdrige);
+        vigik_dump_cartdrige_memory(stdout, next_cartdrige);
     }
+
+    vigik_diff_cartdrige_memory(stdout, cartdrige, next_cartdrige, 5);
 
     vigik_crypto_release_private_key(private_key);
     vigik_release_cartdrige(cartdrige);
+    vigik_release_cartdrige(next_cartdrige);
 }
 
 static void usage(char *argv[]) {
