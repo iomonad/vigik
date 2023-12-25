@@ -311,6 +311,25 @@ static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
 
 }
 
+static uint8_t *vigik_extract_card_signature(Vigik_Cartdrige *cartdrige) {
+    uint8_t *signature = NULL;
+
+    if ((signature = (uint8_t*)malloc(1024 * sizeof(uint8_t))) == NULL) {
+        return NULL;
+    }
+
+    bzero(signature, 1024);
+
+    for (size_t i = 0x3; i < 0x6 ;i++) {
+        size_t mmlocal = (MF1S50YYX_BLOCK_SIZE * MF1S50YYX_SECTOR_SIZE * i);
+
+        memcpy((signature + ((MF1S50YYX_BLOCK_SIZE * 3) * (i - 3))),
+               (cartdrige + mmlocal), (MF1S50YYX_BLOCK_SIZE * 3));
+    }
+
+    return signature;
+}
+
 //
 // VIGIK OPERATIONS
 //
@@ -561,6 +580,14 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 	cartdrige->service = Custom;
         fprintf(stdout, "[W] %s: detected %sCustom Card Service\n" CRESET, __func__,  YEL);
     }
+
+    uint8_t *signature = vigik_extract_card_signature(cartdrige);
+
+    printf("[I] %s: Found signature: \n", __func__);
+    for (size_t i = 0; i < 64; i++)
+        printf("%.02X ", signature[i]);
+
+    free(signature);
     free(service);
 }
 
