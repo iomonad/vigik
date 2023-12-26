@@ -43,6 +43,7 @@ static bool dry_run = false, debug = false,
     memory_view = false, apply_padding = false, quiet = false;
 static char *pk = NULL, *dump = NULL,
     *output = NULL, cmd_root[32], cmd_sub[32];
+
 //
 // MF1S50YYX Operations
 //
@@ -60,7 +61,7 @@ static uint8_t *mf1s50yyx_allocate_memory_slot(void) {
     uint8_t *slot = NULL;
 
     if ((slot = (uint8_t*)malloc(MF1S50YYX_MEMORY_SIZE * sizeof(uint8_t))) == NULL) {
-	printf("[E] %s: malloc() error\n", __func__);
+	fprintf(stdout, "[E] %s: malloc() error\n", __func__);
 	return NULL;
     }
 
@@ -73,7 +74,7 @@ static bool mf1s50yyx_release_memory_slot(uint8_t *buffer) {
 	free(buffer);
 	return true;
     } else {
-	printf("[W] %s: buffer already released\n", __func__);
+	fprintf(stdout, "[W] %s: buffer already released\n", __func__);
 	return false;
     }
 }
@@ -84,7 +85,7 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
     FILE *fp = fopen(path, "rb");
 
     if (fp == NULL) {
-	printf("[E] %s: %s bad dump input\n" CRESET, RED,  __func__);
+	fprintf(stdout, "[E] %s: %s bad dump input\n" CRESET, RED,  __func__);
 	exit(EXIT_FAILURE);
     }
 
@@ -95,7 +96,7 @@ static bool mf1s50yyx_fill_memory_slot(const char *path, uint8_t *slot) {
     fread(slot, len, 1, fp);
 
     if (len != MF1S50YYX_MEMORY_SIZE) {
-	printf("[E] %s: %sbad dump memory size '%ld', expected %d for MF1S50YYX\n" CRESET,
+	fprintf(stdout, "[E] %s: %sbad dump memory size '%ld', expected %d for MF1S50YYX\n" CRESET,
                __func__,
 	       RED,
 	       len, MF1S50YYX_MEMORY_SIZE);
@@ -203,15 +204,15 @@ static void vigik_actualize_fields(Vigik_Cartdrige *cartdrige) {
 
 static void vigik_echo_rsa_signature(unsigned char *signed_sector) {
     if (signed_sector != NULL) {
-        printf("[I] %s:\t\t%s-----BEGIN RSA SIGNATURE-----" CRESET,
+        fprintf(stdout, "[I] %s:\t\t%s-----BEGIN RSA SIGNATURE-----" CRESET,
                __func__, BLU);
         for (size_t i = 0; i < 16 * 9; i++) {
             if ((i % 16) == 0) {
-                printf(CRESET "\n[I] %s:\t%s", __func__, BLU);
+                fprintf(stdout, CRESET "\n[I] %s:\t%s", __func__, BLU);
             }
-            printf("%.02X ", signed_sector[i]);
+            fprintf(stdout, "%.02X ", signed_sector[i]);
         }
-        printf(CRESET "\n[I] %s:\t\t%s-----END RSA SIGNATURE-----\n"
+        fprintf(stdout, CRESET "\n[I] %s:\t\t%s-----END RSA SIGNATURE-----\n"
                CRESET, __func__, BLU);
     }
 }
@@ -240,7 +241,7 @@ static void vigik_crypto_iso_9796_1_padding(unsigned char **encrypted_buffer) {
         }
 
         if (real_block_length != block_length) {
-            printf("[W] %s: %spadding block size divergences %d %d\n" CRESET, __func__, RED, real_block_length, block_length);
+            fprintf(stdout, "[W] %s: %spadding block size divergences %d %d\n" CRESET, __func__, RED, real_block_length, block_length);
         }
         memcpy(*encrypted_buffer, block, real_block_length);
     }
@@ -296,6 +297,7 @@ static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
                 CRESET, __func__, RED, signed_buffer_size);
     }
 
+    fprintf(stdout, "[I] %s: New generated RSA signature:\n", __func__);
     vigik_echo_rsa_signature(signed_vigik_sector);
 
     if (apply_padding) {
@@ -314,17 +316,19 @@ static void vigik_sign_sectors(RSA *pk, Vigik_Cartdrige *cartdrige) {
 static uint8_t *vigik_extract_card_signature(Vigik_Cartdrige *cartdrige) {
     uint8_t *signature = NULL;
 
-    if ((signature = (uint8_t*)malloc(1024 * sizeof(uint8_t))) == NULL) {
+    if ((signature = (uint8_t*)malloc(0x90 * sizeof(uint8_t))) == NULL) {
         return NULL;
     }
 
-    bzero(signature, 1024);
+    bzero(signature, 0x90);
 
-    for (size_t i = 0x3; i < 0x6 ;i++) {
+    for (size_t i = 0x2; i < 0x6 ;i++) {
+        size_t mindex  = ((MF1S50YYX_BLOCK_SIZE * 3) * (i - 2));
         size_t mmlocal = (MF1S50YYX_BLOCK_SIZE * MF1S50YYX_SECTOR_SIZE * i);
 
-        memcpy((signature + ((MF1S50YYX_BLOCK_SIZE * 3) * (i - 3))),
-               (cartdrige + mmlocal), (MF1S50YYX_BLOCK_SIZE * 3));
+        memcpy((signature + mindex),
+               (cartdrige->MF1S50YYX_memory_slot + mmlocal),
+               (MF1S50YYX_BLOCK_SIZE * 3));
     }
 
     return signature;
@@ -390,9 +394,15 @@ static void vigik_release_cartdrige(Vigik_Cartdrige *cartdrige) {
     mf1s50yyx_release_memory_slot(cartdrige->MF1S50YYX_memory_slot);
     cartdrige->MF1S50YYX_memory_slot = NULL;
 
-    free(cartdrige->MF1S50YYX_uid);
-    free(cartdrige->MF1S50YYX_atqa);
-    free(cartdrige->MF1S50YYX_sak);
+    if (cartdrige->MF1S50YYX_uid) {
+        free(cartdrige->MF1S50YYX_uid);
+    }
+    if (cartdrige->MF1S50YYX_atqa) {
+        free(cartdrige->MF1S50YYX_atqa);
+    }
+    if (cartdrige->MF1S50YYX_sak) {
+        free(cartdrige->MF1S50YYX_sak);
+    }
     free(cartdrige);
 }
 
@@ -441,14 +451,14 @@ static void vigik_diff_cartdrige_memory(FILE *fd, Vigik_Cartdrige *original,
     }
 
     if (sectors != MF1S50YYX_SECTOR_COUNT) {
-        printf("\t\t ... truncated\n");
+        fprintf(stdout, "\t\t ... truncated\n");
     }
 }
 
 static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
     fprintf(stdout, "[I] %s: checking memory keys:" CRESET, __func__);
     if (debug) {
-	printf("\n");
+	fprintf(stdout, "\n");
     }
     for (size_t sector = 0; sector < MF1S50YYX_SECTOR_COUNT; sector++) {
 
@@ -465,8 +475,8 @@ static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
 		 : VIGIK_CRYPTO_A_KEY[i]) !=
 		cartdrige->MF1S50YYX_memory_slot[key_memory_segment + i]) {
 
-		printf("badkey A | sector %ld (diff %.02X|%.02X)\n",
-		       sector, ((sector == 0) ? VIGIK_CRYPTO_AZERO_KEY[i]
+		fprintf(stderr, "badkey A | sector %ld (diff %.02X|%.02X)\n",
+                        sector, ((sector == 0) ? VIGIK_CRYPTO_AZERO_KEY[i]
 				: VIGIK_CRYPTO_A_KEY[i]),
 		       cartdrige->MF1S50YYX_memory_slot[key_memory_segment + i]);
 
@@ -474,7 +484,7 @@ static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
 	    }
 	    if (VIGIK_CRYPTO_B_KEY[i]
 		!= cartdrige->MF1S50YYX_memory_slot[key_memory_segment + b_offset]) {
-		printf("badkey b | sector %ld (diff %.02X|%.02X)\n",
+		fprintf(stderr, "badkey b | sector %ld (diff %.02X|%.02X)\n",
 		       sector, VIGIK_CRYPTO_B_KEY[i],
 		       cartdrige->MF1S50YYX_memory_slot[key_memory_segment + b_offset]);
 
@@ -488,7 +498,7 @@ static void vigik_verify_keys(Vigik_Cartdrige *cartdrige) {
     if (!debug) {
 	fprintf(stdout, GRN " VALID\n" CRESET);
     }
-    printf(CRESET);
+    fprintf(stdout, CRESET);
 }
 
 static void vigik_inspect_cartdrige(Vigik_Cartdrige *cartdrige) {
@@ -583,9 +593,8 @@ static void vigik_read_properties(Vigik_Cartdrige *cartdrige) {
 
     uint8_t *signature = vigik_extract_card_signature(cartdrige);
 
-    printf("[I] %s: Found signature: \n", __func__);
-    for (size_t i = 0; i < 64; i++)
-        printf("%.02X ", signature[i]);
+    printf("[I] %s: Found RSA signature in the original dump:\n", __func__);
+    vigik_echo_rsa_signature((unsigned char*) signature);
 
     free(signature);
     free(service);
@@ -610,7 +619,7 @@ static void vigik_write_cartdrige_to_file(const Vigik_Cartdrige *cartdrige,
 
     fclose(fp);
 
-    printf("[I] %s: new dump successfuly written to %s%s\n" CRESET,  __func__, GRN, output);
+    fprintf(stdout, "[I] %s: new dump successfuly written to %s%s\n" CRESET,  __func__, GRN, output);
 }
 
 //
@@ -638,6 +647,8 @@ static void vigik_process_signature(void) {
 
     next_cartdrige = vigik_duplicate_cartdrige(cartdrige);
 
+    fprintf(stdout, "[I] %s: =====> starting refreshing card <=====\n" CRESET, __func__);
+
     vigik_actualize_fields(next_cartdrige);
     vigik_sign_sectors(private_key, next_cartdrige);
 
@@ -649,7 +660,7 @@ static void vigik_process_signature(void) {
 
     vigik_write_cartdrige_to_file(next_cartdrige, output);
 
-    vigik_crypto_release_private_key(private_key);
+xg    vigik_crypto_release_private_key(private_key);
     vigik_release_cartdrige(cartdrige);
     vigik_release_cartdrige(next_cartdrige);
 }
