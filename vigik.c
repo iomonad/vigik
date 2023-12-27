@@ -660,7 +660,7 @@ static void vigik_process_signature(void) {
 
     vigik_write_cartdrige_to_file(next_cartdrige, output);
 
-xg    vigik_crypto_release_private_key(private_key);
+    vigik_crypto_release_private_key(private_key);
     vigik_release_cartdrige(cartdrige);
     vigik_release_cartdrige(next_cartdrige);
 }
